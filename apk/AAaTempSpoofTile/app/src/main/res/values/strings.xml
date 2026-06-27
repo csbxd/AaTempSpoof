@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- App -->
+    <string name="app_name">AaTempSpoof</string>
+
+    <!-- Tile -->
+    <string name="tile_label">AaTempSpoof</string>
+    <string name="tile_subtitle_on">已开启</string>
+    <string name="tile_subtitle_off">已关闭</string>
+    <string name="tile_processing">处理中…</string>
+
+    <!-- Root -->
+    <string name="root_checking">检测 Root 权限中…</string>
+    <string name="root_granted">Root 权限已授予</string>
+    <string name="root_denied">未获取 Root 权限</string>
+    <string name="no_root_short">需要 Root</string>
+    <string name="no_root_toast">需要 Root 权限，操作已取消</string>
+    <string name="btn_retry_root">重新授权</string>
+
+    <!-- Switch -->
+    <string name="switch_on">AaTempSpoof 已开启</string>
+    <string name="switch_off">AaTempSpoof 已关闭</string>
+    <string name="switch_no_root">无法操作（缺少 Root）</string>
+    <string name="sub_hint_on">已写入 1 → 总开关.txt</string>
+    <string name="sub_hint_off">已写入 0 → 总开关.txt</string>
+
+    <!-- Error -->
+    <string name="write_error">写入失败，请检查模块路径</string>
+
+    <!-- Guide -->
+    <string name="guide_title">如何添加到控制中心</string>
+    <string name="guide_step1">① 下拉通知栏 → 展开快捷设置面板</string>
+    <string name="guide_step2">② 点击右上角的编辑 / 铅笔图标</string>
+    <string name="guide_step3">③ 找到「AaTempSpoof」并长按拖入面板</string>
+
+    <!-- Header subtitle -->
+    <string name="app_subtitle">AAaTempSpoof 模块控制</string>
+    <string name="file_path_label">/AAaTempSpoof/总开关.txt</string>
+
+    <!-- Update -->
+    <string name="update_title">发现新版本</string>
+    <string name="update_message">检测到新版本 %1$s，当前版本为 %2$s，是否前往下载？</string>
+    <string name="update_btn_go">立即更新</string>
+    <string name="update_btn_later">稍后再说</string>
+    <string name="update_password_title">下载密码</string>
+    <string name="update_password_message">解压密码：%1$s</string>
+    <string name="update_btn_copy_password">复制密码</string>
+    <string name="update_btn_download">前往下载</string>
+    <string name="update_password_copied">密码已复制到剪贴板</string>
+    <string name="update_check_btn">检测更新</string>
+    <string name="update_already_latest">已是最新版本</string>
+    <string name="update_checking">正在检测更新…</string>
+</resources>

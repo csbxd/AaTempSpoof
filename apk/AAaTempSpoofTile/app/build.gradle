@@ -1,0 +1,45 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.aatempspoof.tile'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.aatempspoof.tile"
+        minSdk 26           // Android 8.0+（Adaptive Icon & QS Tile 完整支持）
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+        encoding = "UTF-8"  // 确保中文路径字符串正确编译
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.debug   // 调试签名即可 Root 场景使用
+        }
+        debug {
+            applicationIdSuffix ""
+            debuggable true
+        }
+    }
+
+    // 资源压缩（保留中文字符串）
+    packagingOptions {
+        resources {
+            excludes += ['/META-INF/*.kotlin_module']
+        }
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+}

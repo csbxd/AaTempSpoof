@@ -1,0 +1,9 @@
+rz=0
+id=AAaTempSpoof
+name=AaTempSpoof
+version=v13.5
+versionCode=135
+AaTempSpoof=f4132feaae94126acbdd53549c8cf15f313f89db57824283ed9b32d1ca23b101
+author=酷安@傻瓜我爱你呀喵
+description=若看到此句则代表刷入脚本运行异常，请重新刷入模块
+updateJson=https://raw.githubusercontent.com/chendaojing949-sketch/AaTempSpoof/main/update.json

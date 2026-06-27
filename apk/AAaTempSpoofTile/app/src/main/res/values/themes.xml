@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/accent_cyan</item>
+        <item name="colorPrimaryDark">@color/bg_app</item>
+        <item name="colorAccent">@color/accent_cyan</item>
+
+        <!-- 窗口背景、状态栏、导航栏 浅色 -->
+        <item name="android:windowBackground">@color/bg_app</item>
+        <item name="android:statusBarColor">@color/bg_app</item>
+        <item name="android:navigationBarColor">@color/bg_app</item>
+
+        <!-- 深色状态栏图标（用于浅色背景） -->
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>
