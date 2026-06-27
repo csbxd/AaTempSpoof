@@ -276,7 +276,7 @@ static void module_restore_response(void)
 
 static void mkdirp(const char *path)
 {
-    char tmp[MAX_PATH]; strncpy(tmp, path, MAX_PATH-1);
+    char tmp[MAX_PATH]; strcpy_s(tmp, MAX_PATH, path);
     for (char *p = tmp+1; *p; p++)
         if (*p == '/') { *p = '\0'; mkdir(tmp, 0755); *p = '/'; }
     mkdir(tmp, 0755);
@@ -626,7 +626,7 @@ static void discover_zones(void)
         if(t==-1) continue;
         int is_rf = (t==-2);
         if(is_rf) t=Z_MISC;
-        strncpy(g_zones[g_nzones].path,emul,MAX_PATH-1);
+        strcpy_s(g_zones[g_nzones].path, MAX_PATH, emul);
         snprintf(g_zones[g_nzones].mode,MAX_PATH,
                  "/sys/class/thermal/%s/mode",ent->d_name);
         for(int j=0;j<MAX_TRIPS;j++) g_zones[g_nzones].trip_orig[j]=-1;
@@ -651,7 +651,7 @@ static void disable_zone_governors(void)
             (g_zones[i].type == Z_MEM && g_en_mem);
         int change_trip_wall = (g_zones[i].type == Z_CPU) || g_en_gpu_mem_trip_wall;
         char zroot[MAX_PATH];
-        strncpy(zroot, g_zones[i].mode, MAX_PATH-1);
+        strcpy_s(zroot, MAX_PATH, g_zones[i].mode);
         char *sl = strrchr(zroot, '/'); if (sl) *sl = '\0';
         for (int j = 0; j < MAX_TRIPS; j++) {
             char tp[MAX_PATH];
@@ -679,7 +679,7 @@ static void enable_zone_governors(void)
             g_zones[i].type != Z_MEM) continue;
         if (!g_zones[i].mode[0]) continue;
         char zroot[MAX_PATH];
-        strncpy(zroot, g_zones[i].mode, MAX_PATH-1);
+        strcpy_s(zroot, MAX_PATH, g_zones[i].mode);
         char *sl = strrchr(zroot, '/'); if (sl) *sl = '\0';
         for (int j = 0; j < MAX_TRIPS; j++) {
             if (g_zones[i].trip_orig[j] == -1) break;
@@ -909,7 +909,7 @@ static void write_fake_bcc_file(void)
     int out_len = 0;
 
     if(real_n > 0){
-        char tmp[512]; strncpy(tmp, real_buf, sizeof(tmp) - 1);
+        char tmp[512]; strcpy_s(tmp, sizeof(tmp), real_buf);
         char *p = tmp;
         int idx = 0, first = 1;
         while(p && *p){
@@ -1311,13 +1311,13 @@ static void refresh_fake_uevent(void)
         if(g_en_batt && strncmp(p,"POWER_SUPPLY_TEMP=",18)==0){
             char tmp[64];
             int m=snprintf(tmp,sizeof(tmp),"POWER_SUPPLY_TEMP=%d\n",cur_temp);
-            if(m<0 || (size_t)m >= sizeof(tmp) || (size_t)m > sizeof(out)-out_len) return;
+            if(m<0 || (size_t)m >= sizeof(tmp) || out_len >= sizeof(out) || (size_t)m > sizeof(out)-out_len) return;
             memcpy(out+out_len,tmp,(size_t)m); out_len += (size_t)m;
         }
         else if(g_en_cycle && strncmp(p,"POWER_SUPPLY_CYCLE_COUNT=",25)==0){
             char tmp[64];
             int m=snprintf(tmp,sizeof(tmp),"POWER_SUPPLY_CYCLE_COUNT=%d\n",cur_cycle);
-            if(m<0 || (size_t)m >= sizeof(tmp) || (size_t)m > sizeof(out)-out_len) return;
+            if(m<0 || (size_t)m >= sizeof(tmp) || out_len >= sizeof(out) || (size_t)m > sizeof(out)-out_len) return;
             memcpy(out+out_len,tmp,(size_t)m); out_len += (size_t)m;
         }
         else{
@@ -1921,7 +1921,7 @@ static void mount_thermal_configs(void)
         if (tc_is_mounted(THERMAL_CFG_PATHS[i])) continue;
         if (mount(FAKE_EMPTY, THERMAL_CFG_PATHS[i], NULL, MS_BIND, NULL) == 0) {
             if (g_tc_nmounted < MAX_TC_MOUNTS)
-                strncpy(g_tc_mounted[g_tc_nmounted++], THERMAL_CFG_PATHS[i], MAX_PATH-1);
+                strcpy_s(g_tc_mounted[g_tc_nmounted], MAX_PATH, THERMAL_CFG_PATHS[i]); g_tc_nmounted++;
         }
     }
 
@@ -2123,7 +2123,7 @@ static void detect_bl_path(void)
     };
     for (int i = 0; c[i]; i++) {
         if (!access(c[i], R_OK)) {
-            strncpy(g_blpath, c[i], MAX_PATH-1);
+            strcpy_s(g_blpath, MAX_PATH, c[i]);
             return;
         }
     }
@@ -2400,7 +2400,7 @@ static int read_prop_field(const char *path, const char *key,
         int l = (int)strlen(line);
         while (l > 0 && (unsigned char)line[l-1] <= ' ') line[--l] = '\0';
         if (strncmp(line, key, klen) != 0 || line[klen] != '=') continue;
-        strncpy(out, line + klen + 1, outlen - 1);
+        strcpy_s(out, outlen, line + klen + 1);
         out[outlen - 1] = '\0';
         found = 1;
         break;
@@ -2720,7 +2720,7 @@ int main(int argc, char *argv[])
 
     int ifd=inotify_init1(IN_NONBLOCK|IN_CLOEXEC),iwd=-1;
     if(ifd>=0){
-        char dir[MAX_PATH]; strncpy(dir,g_cfgpath,MAX_PATH-1);
+        char dir[MAX_PATH]; strcpy_s(dir, MAX_PATH, g_cfgpath);
         char *sl=strrchr(dir,'/'); if(sl)*sl='\0';
         iwd=inotify_add_watch(ifd,dir,IN_CLOSE_WRITE|IN_MOVED_TO);
         if(iwd<0){close(ifd);ifd=-1;}
@@ -2732,7 +2732,7 @@ int main(int argc, char *argv[])
     if(g_blpath[0]){
         blfd=inotify_init1(IN_NONBLOCK|IN_CLOEXEC);
         if(blfd>=0){
-            char bldir[MAX_PATH]; strncpy(bldir,g_blpath,MAX_PATH-1);
+            char bldir[MAX_PATH]; strcpy_s(bldir, MAX_PATH, g_blpath);
             char *sl=strrchr(bldir,'/'); if(sl)*sl='\0';
             blwd=inotify_add_watch(blfd,bldir,IN_MODIFY);
             if(blwd<0){close(blfd);blfd=-1;}
@@ -2777,7 +2777,7 @@ int main(int argc, char *argv[])
         for (int i = 0; XM_THERMAL_NODES[i]; i++) {
             if (access(XM_THERMAL_NODES[i], W_OK)) continue;
             char xmdir[MAX_PATH];
-            strncpy(xmdir, XM_THERMAL_NODES[i], MAX_PATH-1);
+            strcpy_s(xmdir, MAX_PATH, XM_THERMAL_NODES[i]);
             char *sl = strrchr(xmdir, '/'); if (sl) *sl = '\0';
 
             if (inotify_add_watch(xmfd, xmdir, IN_MODIFY) >= 0)
