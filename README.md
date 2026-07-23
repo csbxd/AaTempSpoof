@@ -172,8 +172,8 @@ apk/AaTempSpoof.apk
 
 `.github/workflows/build.yml` 会固定使用 JDK 17、Gradle 8.2.1、Android SDK 34 和 NDK r29：
 
-- 向 `main` 推送或创建 Pull Request：编译并校验 unsigned Release APK 和 arm64-v8a native 程序，不生成可发布模块。
-- 手动运行 workflow：要求正式签名，校验证书后生成完整模块 ZIP、独立 APK、native ZIP 和 `SHA256SUMS`。
+- 向 `main` 推送、创建 Pull Request，或手动运行时不勾选 `release`：编译并校验 unsigned Release APK 和 arm64-v8a native 程序，不生成可发布模块。
+- 手动运行 workflow 并勾选 `release`：要求正式签名，校验证书后生成完整模块 ZIP、独立 APK、native ZIP 和 `SHA256SUMS`。
 - 推送与 `module.prop` 版本完全相同的 `v*` 标签：完成上述构建并自动创建或更新对应的 GitHub Release。
 
 正式发布前，需要在仓库的 `Settings → Secrets and variables → Actions` 中配置：
