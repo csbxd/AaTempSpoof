@@ -2,6 +2,30 @@ plugins {
     id 'com.android.application'
 }
 
+def modulePropertiesFile = rootProject.file('../../module.prop')
+if (!modulePropertiesFile.isFile()) {
+    throw new GradleException("Missing module metadata: ${modulePropertiesFile}")
+}
+
+def moduleProperties = new Properties()
+modulePropertiesFile.withInputStream { moduleProperties.load(it) }
+
+def moduleVersion = moduleProperties.getProperty('version')
+def moduleVersionCode = moduleProperties.getProperty('versionCode')
+if (!moduleVersion || !moduleVersionCode?.isInteger()) {
+    throw new GradleException('module.prop must contain a valid version and numeric versionCode')
+}
+
+def releaseSigning = [
+    storeFile    : System.getenv('ANDROID_KEYSTORE_PATH'),
+    storePassword: System.getenv('ANDROID_KEYSTORE_PASSWORD'),
+    keyAlias     : System.getenv('ANDROID_KEY_ALIAS'),
+    keyPassword  : System.getenv('ANDROID_KEY_PASSWORD')
+]
+def hasReleaseSigning = releaseSigning.values().every { value ->
+    value != null && !value.trim().isEmpty()
+}
+
 android {
     namespace 'com.aatempspoof.tile'
     compileSdk 34
@@ -10,8 +34,19 @@ android {
         applicationId "com.aatempspoof.tile"
         minSdk 26           // Android 8.0+（Adaptive Icon & QS Tile 完整支持）
         targetSdk 34
-        versionCode 1
-        versionName "1.0"
+        versionCode moduleVersionCode.toInteger()
+        versionName moduleVersion.replaceFirst('^v', '')
+    }
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            release {
+                storeFile file(releaseSigning.storeFile)
+                storePassword releaseSigning.storePassword
+                keyAlias releaseSigning.keyAlias
+                keyPassword releaseSigning.keyPassword
+            }
+        }
     }
 
     compileOptions {
@@ -22,9 +57,12 @@ android {
 
     buildTypes {
         release {
+            debuggable false
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            signingConfig signingConfigs.debug   // 调试签名即可 Root 场景使用
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
         }
         debug {
             applicationIdSuffix ""

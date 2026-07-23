@@ -10,6 +10,7 @@
     <string name="tile_processing">处理中…</string>
 
     <!-- Root -->
+    <string name="root_permission_title">Root 权限</string>
     <string name="root_checking">检测 Root 权限中…</string>
     <string name="root_granted">Root 权限已授予</string>
     <string name="root_denied">未获取 Root 权限</string>

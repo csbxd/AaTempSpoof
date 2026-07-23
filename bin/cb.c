@@ -401,7 +401,6 @@ int main(void) {
                 int ct = read_charge_type();
 
                 if (ct != prev_charge_type) {
-                    char buf[128];
                     const char *proto_str;
                     if      (ct == CHG_TYPE_SVOOC) proto_str = "SVOOC(14) ✓";
                     else if (ct == CHG_TYPE_UFCS)  proto_str = "UFCS(15)  ✓";

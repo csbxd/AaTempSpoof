@@ -130,11 +130,11 @@ apk/AAaTempSpoofTile/
 
 推荐用 Android Studio 打开该目录构建。
 
-命令行构建需要 Android SDK、JDK 和 Gradle 环境。当前仓库中没有完整 Gradle Wrapper 可执行脚本时，可先使用本机 Gradle，或自行补齐 wrapper 后执行：
+命令行构建需要 Android SDK 和 JDK 17。仓库已经提交并锁定 Gradle Wrapper，开发调试可执行：
 
 ```sh
 cd apk/AAaTempSpoofTile
-gradle assembleDebug
+./gradlew :app:assembleDebug
 ```
 
 APK 输出通常位于：
@@ -143,13 +143,55 @@ APK 输出通常位于：
 apk/AAaTempSpoofTile/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-发布模块时可将该 APK 放到：
+Debug APK 仅用于本机开发，不能作为发布产物。正式发布必须提供独立且长期保存的签名密钥：
+
+```sh
+export ANDROID_KEYSTORE_PATH=/absolute/path/to/release.jks
+export ANDROID_KEYSTORE_PASSWORD='your-store-password'
+export ANDROID_KEY_ALIAS='your-key-alias'
+export ANDROID_KEY_PASSWORD='your-key-password'
+
+./gradlew :app:lintRelease :app:assembleRelease
+```
+
+签名后的 APK 位于：
+
+```text
+apk/AAaTempSpoofTile/app/build/outputs/apk/release/app-release.apk
+```
+
+发布模块时将它放到：
 
 ```text
 apk/AaTempSpoof.apk
 ```
 
 安装脚本会在用户选择时尝试安装它。
+
+## GitHub Actions
+
+`.github/workflows/build.yml` 会固定使用 JDK 17、Gradle 8.2.1、Android SDK 34 和 NDK r29：
+
+- 向 `main` 推送或创建 Pull Request：编译并校验 unsigned Release APK 和 arm64-v8a native 程序，不生成可发布模块。
+- 手动运行 workflow：要求正式签名，校验证书后生成完整模块 ZIP、独立 APK、native ZIP 和 `SHA256SUMS`。
+- 推送与 `module.prop` 版本完全相同的 `v*` 标签：完成上述构建并自动创建或更新对应的 GitHub Release。
+
+正式发布前，需要在仓库的 `Settings → Secrets and variables → Actions` 中配置：
+
+```text
+ANDROID_KEYSTORE_BASE64
+ANDROID_KEYSTORE_PASSWORD
+ANDROID_KEY_ALIAS
+ANDROID_KEY_PASSWORD
+```
+
+其中 `ANDROID_KEYSTORE_BASE64` 可通过以下命令生成：
+
+```sh
+base64 -w 0 release.jks
+```
+
+签名密钥必须另外离线备份。丢失密钥后，已安装的 APK 将无法通过升级方式安装后续版本。
 
 ## 打包 release zip
 
@@ -166,7 +208,7 @@ AAaTempSpoof/
 ├── AaTempSpoof/
 ├── webroot/
 ├── apk/
-│   └── AaTempSpoof.apk          可选
+│   └── AaTempSpoof.apk          已签名的 Release APK
 └── bin/
     ├── AaTempSpoof
     ├── cb
@@ -181,19 +223,21 @@ AAaTempSpoof/
 rm -rf build/release
 mkdir -p build/release/AAaTempSpoof/bin
 
-cp module.prop customize.sh service.sh post-fs-data.sh action.sh uninstall.sh build/release/AAaTempSpoof/
+install -m 0644 module.prop build/release/AAaTempSpoof/
+install -m 0755 customize.sh service.sh post-fs-data.sh action.sh uninstall.sh build/release/AAaTempSpoof/
 cp -r AaTempSpoof webroot build/release/AAaTempSpoof/
-cp build/bin/* build/release/AAaTempSpoof/bin/
+install -m 0755 build/bin/* build/release/AAaTempSpoof/bin/
 
-# 可选：复制快捷开关 APK
+# 必须使用已签名的 Release APK；文件不存在时立即失败
 mkdir -p build/release/AAaTempSpoof/apk
-cp apk/AAaTempSpoofTile/app/build/outputs/apk/debug/app-debug.apk build/release/AAaTempSpoof/apk/AaTempSpoof.apk 2>/dev/null || true
+install -m 0644 apk/AAaTempSpoofTile/app/build/outputs/apk/release/app-release.apk \
+  build/release/AAaTempSpoof/apk/AaTempSpoof.apk
 
 cd build/release/AAaTempSpoof
-zip -r ../AAaTempSpoof-v13.5.zip .
+zip -r ../AaTempSpoof-v13.5.zip .
 ```
 
-生成的 `AAaTempSpoof-v13.5.zip` 才是用于模块管理器刷入的包。
+生成的 `AaTempSpoof-v13.5.zip` 才是用于模块管理器刷入的包。
 
 ## 安装与使用
 

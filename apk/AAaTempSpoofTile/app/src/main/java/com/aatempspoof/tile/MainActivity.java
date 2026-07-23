@@ -26,6 +26,8 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import org.json.JSONObject;
+
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
@@ -40,7 +42,7 @@ public class MainActivity extends AppCompatActivity {
     private static final int COLOR_ROOT_FAIL   = 0xFFEF4444;
 
     private static final String UPDATE_URL =
-            "https://raw.githubusercontent.com/chendaojing949-sketch/AAaTempSpoofTile/refs/heads/main/update.json";
+            "https://raw.githubusercontent.com/csbxd/AaTempSpoof/main/update.json";
     private static final String DOWNLOAD_URL =
             "https://wwbjv.lanzn.com/b0188e5u6j";
     private static final String DOWNLOAD_PASSWORD = "1lek";
@@ -178,7 +180,10 @@ public class MainActivity extends AppCompatActivity {
                 sb.append(line);
             }
             reader.close();
-            return sb.toString().trim();
+
+            JSONObject metadata = new JSONObject(sb.toString());
+            String version = metadata.optString("version", "").trim();
+            return version.startsWith("v") ? version.substring(1) : version;
         } catch (Exception e) {
             return null;
         } finally {

@@ -139,11 +139,6 @@ static int apply_rate(const RateEntry *e)
     return 0;
 }
 
-static void apply_default(void)
-{
-    system(CMD " -c wo 0 26 0 >/dev/null 2>&1");
-}
-
 int main(void)
 {
 

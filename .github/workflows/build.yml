@@ -1,162 +1,441 @@
-name: Build AAaTempSpoof
+name: Build AaTempSpoof
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ANDROID_API: "21"
+  ANDROID_BUILD_TOOLS: "34.0.0"
+  ANDROID_COMPILE_SDK: "34"
+  NDK_VERSION: "29.0.14206865"
+  RELEASE_BUILD: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') }}
 
 jobs:
-  build-native:
-    runs-on: ubuntu-latest
+  build:
+    name: Build and package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install build tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y wget unzip make zip file
-
-      - name: Download Android NDK r29
-        run: |
-          mkdir -p $HOME/android-ndk
-          cd $HOME/android-ndk
-          wget -q https://dl.google.com/android/repository/android-ndk-r29-linux.zip
-          unzip -q android-ndk-r29-linux.zip
-
-      - name: Set NDK environment
-        run: |
-          echo "NDK=$HOME/android-ndk/android-ndk-r29" >> $GITHUB_ENV
-          echo "$HOME/android-ndk/android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
-
-      - name: Build Android arm64-v8a binaries
-        run: |
-          mkdir -p build/bin
-
-          export TARGET=aarch64-linux-android
-          export API=21
-          export CC=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/${TARGET}${API}-clang
-          export CXX=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/${TARGET}${API}-clang++
-
-          $CC bin/AaTempSpoof/main.c \
-            -I bin/AaTempSpoof \
-            -O2 -fPIE -pie -Wall \
-            -o build/bin/AaTempSpoof
-
-          $CC bin/cb.c -O2 -fPIE -pie -Wall -o build/bin/cb
-          $CC bin/charge_horae_daemon.c -O2 -fPIE -pie -Wall -o build/bin/charge_horae_daemon
-          $CC bin/color_tombstone.c -O2 -fPIE -pie -Wall -o build/bin/color_tombstone
-          $CC bin/touch_daemon.c -O2 -fPIE -pie -Wall -o build/bin/touch_daemon
-
-          $NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip \
-            build/bin/AaTempSpoof \
-            build/bin/cb \
-            build/bin/charge_horae_daemon \
-            build/bin/color_tombstone \
-            build/bin/touch_daemon
-
-      - name: Verify binary architecture
-        run: |
-          file build/bin/AaTempSpoof
-          file build/bin/cb
-          file build/bin/charge_horae_daemon
-          file build/bin/color_tombstone
-          file build/bin/touch_daemon
-
-      - name: Upload native binaries
-        uses: actions/upload-artifact@v4
-        with:
-          name: native-binaries
-          path: build/bin/
-
-  build-apk:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up JDK
-        uses: actions/setup-java@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
         with:
           distribution: temurin
           java-version: "17"
-          
-      - name: Install Gradle 8.2
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
+        with:
+          cache-provider: basic
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
+
+      - name: Set up Android SDK and NDK
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+        with:
+          log-accepted-android-sdk-licenses: false
+          packages: >-
+            platform-tools
+            platforms;android-${{ env.ANDROID_COMPILE_SDK }}
+            build-tools;${{ env.ANDROID_BUILD_TOOLS }}
+            ndk;${{ env.NDK_VERSION }}
+
+      - name: Check required tools
         run: |
-          sudo apt-get update
-          sudo apt-get install -y wget unzip
-          wget https://services.gradle.org/distributions/gradle-8.2-bin.zip
-          unzip gradle-8.2-bin.zip -d $HOME/gradle
-          echo "$HOME/gradle/gradle-8.2/bin" >> $GITHUB_PATH
+          set -euo pipefail
+          for tool in base64 file jq keytool readelf sha256sum unzip zip zipinfo; do
+            command -v "$tool" >/dev/null || {
+              echo "::error::Required tool not found: $tool"
+              exit 1
+            }
+          done
 
-      - name: Show Gradle version
-        run: gradle -v
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Make gradlew executable if exists
+      - name: Validate release metadata
         run: |
-          if [ -f "apk/AAaTempSpoofTile/gradlew" ]; then
-            chmod +x apk/AAaTempSpoofTile/gradlew
+          set -euo pipefail
+
+          module_version="$(sed -n 's/^version=//p' module.prop)"
+          module_version_code="$(sed -n 's/^versionCode=//p' module.prop)"
+          module_update_url="$(sed -n 's/^updateJson=//p' module.prop)"
+          expected_update_url="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/update.json"
+
+          [[ "$module_version" =~ ^v[0-9]+([.][0-9]+)*$ ]] || {
+            echo "::error::Invalid module version: $module_version"
+            exit 1
+          }
+          [[ "$module_version_code" =~ ^[0-9]+$ ]] || {
+            echo "::error::Invalid module versionCode: $module_version_code"
+            exit 1
+          }
+          [[ "$module_update_url" == "$expected_update_url" ]] || {
+            echo "::error::module.prop updateJson does not point to this repository"
+            exit 1
+          }
+
+          [[ "$(jq -er '.version' update.json)" == "$module_version" ]] || {
+            echo "::error::update.json version does not match module.prop"
+            exit 1
+          }
+          [[ "$(jq -er '.versionCode | tostring' update.json)" == "$module_version_code" ]] || {
+            echo "::error::update.json versionCode does not match module.prop"
+            exit 1
+          }
+
+          expected_zip_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${module_version}/AaTempSpoof-${module_version}.zip"
+          [[ "$(jq -er '.zipUrl' update.json)" == "$expected_zip_url" ]] || {
+            echo "::error::update.json zipUrl does not match the release asset name"
+            exit 1
+          }
+          expected_changelog_url="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/changelog.md"
+          [[ "$(jq -er '.changelog' update.json)" == "$expected_changelog_url" ]] || {
+            echo "::error::update.json changelog does not point to this repository"
+            exit 1
+          }
+          jq -e '.support | index("arm64-v8a") != null' update.json >/dev/null || {
+            echo "::error::update.json does not declare arm64-v8a support"
+            exit 1
+          }
+
+          expected_webroot_hash="$(sed -n 's/^AaTempSpoof=//p' module.prop)"
+          actual_webroot_hash="$(sha256sum webroot/index.html | cut -d ' ' -f 1)"
+          [[ "$expected_webroot_hash" == "$actual_webroot_hash" ]] || {
+            echo "::error::module.prop WebUI hash does not match webroot/index.html"
+            exit 1
+          }
+
+      - name: Build native arm64-v8a executables
+        run: |
+          set -euo pipefail
+
+          toolchain="${ANDROID_SDK_ROOT}/ndk/${NDK_VERSION}/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          cc="${toolchain}/aarch64-linux-android${ANDROID_API}-clang"
+          strip="${toolchain}/llvm-strip"
+
+          [[ -x "$cc" ]] || {
+            echo "::error::NDK compiler not found: $cc"
+            exit 1
+          }
+
+          install -d build/bin
+          common_flags=(-O2 -fPIE -pie -Wall -Wextra -fstack-protector-strong -D_FORTIFY_SOURCE=2)
+          linker_flags=(-Wl,-z,relro,-z,now)
+
+          "$cc" bin/AaTempSpoof/main.c \
+            -I bin/AaTempSpoof \
+            "${common_flags[@]}" "${linker_flags[@]}" \
+            -o build/bin/AaTempSpoof
+
+          "$cc" bin/cb.c "${common_flags[@]}" "${linker_flags[@]}" -o build/bin/cb
+          "$cc" bin/charge_horae_daemon.c "${common_flags[@]}" "${linker_flags[@]}" -o build/bin/charge_horae_daemon
+          "$cc" bin/color_tombstone.c "${common_flags[@]}" "${linker_flags[@]}" -o build/bin/color_tombstone
+          "$cc" bin/touch_daemon.c "${common_flags[@]}" "${linker_flags[@]}" -o build/bin/touch_daemon
+
+          "$strip" --strip-unneeded build/bin/*
+          chmod 0755 build/bin/*
+
+      - name: Verify native executables
+        run: |
+          set -euo pipefail
+
+          binaries=(AaTempSpoof cb charge_horae_daemon color_tombstone touch_daemon)
+          for name in "${binaries[@]}"; do
+            binary="build/bin/${name}"
+            description="$(file -b "$binary")"
+            printf '%s: %s\n' "$name" "$description"
+
+            [[ -x "$binary" ]] || {
+              echo "::error::$binary is not executable"
+              exit 1
+            }
+            [[ "$description" == *"ELF 64-bit"* && "$description" == *"ARM aarch64"* ]] || {
+              echo "::error::$binary is not an arm64-v8a ELF executable"
+              exit 1
+            }
+            readelf -h "$binary" | grep -Eq 'Machine:[[:space:]]+AArch64' || {
+              echo "::error::$binary has an unexpected ELF machine type"
+              exit 1
+            }
+          done
+
+      - name: Archive native executables
+        run: |
+          set -euo pipefail
+          install -d build/artifacts
+          (
+            cd build/bin
+            zip -9 ../artifacts/AaTempSpoof-native-arm64-v8a.zip \
+              AaTempSpoof cb charge_horae_daemon color_tombstone touch_daemon
+          )
+          unzip -t build/artifacts/AaTempSpoof-native-arm64-v8a.zip
+          verify_directory="$(mktemp -d "${RUNNER_TEMP}/native-archive.XXXXXX")"
+          unzip -q build/artifacts/AaTempSpoof-native-arm64-v8a.zip -d "$verify_directory"
+          for binary in AaTempSpoof cb charge_horae_daemon color_tombstone touch_daemon; do
+            [[ -x "$verify_directory/$binary" ]] || {
+              echo "::error::Native archive lost the executable mode for $binary"
+              exit 1
+            }
+          done
+
+      - name: Prepare release signing
+        if: env.RELEASE_BUILD == 'true'
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          missing=()
+          for variable in \
+            ANDROID_KEYSTORE_BASE64 \
+            ANDROID_KEYSTORE_PASSWORD \
+            ANDROID_KEY_ALIAS \
+            ANDROID_KEY_PASSWORD; do
+            [[ -n "${!variable:-}" ]] || missing+=("$variable")
+          done
+
+          if (( ${#missing[@]} > 0 )); then
+            echo "::error::Missing release-signing secrets: ${missing[*]}"
+            exit 1
           fi
 
-      - name: Show Gradle version
-        run: gradle -v
-        
-      - name: Build APK
+          keystore="${RUNNER_TEMP}/aatempspoof-release.jks"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          chmod 0600 "$keystore"
+          [[ -s "$keystore" ]] || {
+            echo "::error::Decoded keystore is empty"
+            exit 1
+          }
+
+          keytool -list \
+            -keystore "$keystore" \
+            -storepass "$ANDROID_KEYSTORE_PASSWORD" \
+            -alias "$ANDROID_KEY_ALIAS" >/dev/null
+
+          echo "ANDROID_KEYSTORE_PATH=$keystore" >> "$GITHUB_ENV"
+
+      - name: Build Release APK
         working-directory: apk/AAaTempSpoofTile
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew --no-daemon --stacktrace :app:lintRelease :app:assembleRelease
+
+      - name: Collect Release APK
+        id: apk
         run: |
-          if [ -f "./gradlew" ]; then
-            ./gradlew assembleDebug
+          set -euo pipefail
+
+          apk_directory="apk/AAaTempSpoofTile/app/build/outputs/apk/release"
+          if [[ "$RELEASE_BUILD" == "true" ]]; then
+            source_apk="${apk_directory}/app-release.apk"
+            output_apk="build/artifacts/AaTempSpoof.apk"
           else
-            gradle assembleDebug
+            source_apk="${apk_directory}/app-release-unsigned.apk"
+            output_apk="build/artifacts/AaTempSpoof-unsigned.apk"
           fi
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: aa-temp-spoof-apk
-          path: apk/AAaTempSpoofTile/app/build/outputs/apk/debug/app-debug.apk
+          [[ -f "$source_apk" ]] || {
+            echo "::error::Expected APK not found: $source_apk"
+            find "$apk_directory" -maxdepth 1 -type f -print 2>/dev/null || true
+            exit 1
+          }
 
-  package-release:
-    runs-on: ubuntu-latest
-    needs: [build-native, build-apk]
+          install -m 0644 "$source_apk" "$output_apk"
+          echo "path=$output_apk" >> "$GITHUB_OUTPUT"
+
+      - name: Verify APK alignment and signature
+        run: |
+          set -euo pipefail
+
+          apk="${{ steps.apk.outputs.path }}"
+          build_tools="${ANDROID_SDK_ROOT}/build-tools/${ANDROID_BUILD_TOOLS}"
+          "$build_tools/zipalign" -c 4 "$apk"
+
+          if [[ "$RELEASE_BUILD" == "true" ]]; then
+            signer_info="$("$build_tools/apksigner" verify --verbose --print-certs "$apk")"
+            printf '%s\n' "$signer_info"
+            if grep -Fqi 'Android Debug' <<< "$signer_info"; then
+              echo "::error::Release APK is signed with an Android debug certificate"
+              exit 1
+            fi
+          fi
+
+      - name: Package signed module
+        id: package
+        if: env.RELEASE_BUILD == 'true'
+        run: |
+          set -euo pipefail
+
+          version="$(sed -n 's/^version=//p' module.prop)"
+          [[ "$version" =~ ^[A-Za-z0-9._-]+$ ]] || {
+            echo "::error::Invalid or missing version in module.prop: $version"
+            exit 1
+          }
+          if [[ "$GITHUB_REF" == refs/tags/* && "$GITHUB_REF_NAME" != "$version" ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match module version $version"
+            exit 1
+          fi
+
+          stage_directory="$(mktemp -d "${RUNNER_TEMP}/AaTempSpoof.XXXXXX")"
+          output_directory="${GITHUB_WORKSPACE}/build/release"
+          install -d "$stage_directory/bin" "$stage_directory/apk" "$output_directory"
+
+          install -m 0644 module.prop "$stage_directory/"
+          install -m 0755 \
+            customize.sh service.sh post-fs-data.sh action.sh uninstall.sh \
+            "$stage_directory/"
+          cp -a AaTempSpoof webroot "$stage_directory/"
+
+          for binary in AaTempSpoof cb charge_horae_daemon color_tombstone touch_daemon; do
+            install -m 0755 "build/bin/$binary" "$stage_directory/bin/$binary"
+          done
+          install -m 0644 "${{ steps.apk.outputs.path }}" "$stage_directory/apk/AaTempSpoof.apk"
+
+          zip_path="${output_directory}/AaTempSpoof-${version}.zip"
+          (
+            cd "$stage_directory"
+            zip -9 -r "$zip_path" .
+          )
+
+          unzip -t "$zip_path"
+          for required in \
+            module.prop customize.sh service.sh post-fs-data.sh action.sh uninstall.sh \
+            apk/AaTempSpoof.apk \
+            bin/AaTempSpoof bin/cb bin/charge_horae_daemon bin/color_tombstone bin/touch_daemon; do
+            unzip -Z1 "$zip_path" | grep -Fxq "$required" || {
+              echo "::error::Release archive is missing $required"
+              exit 1
+            }
+          done
+
+          verify_directory="$(mktemp -d "${RUNNER_TEMP}/module-archive.XXXXXX")"
+          unzip -q "$zip_path" -d "$verify_directory"
+          for executable in \
+            customize.sh service.sh post-fs-data.sh action.sh uninstall.sh \
+            bin/AaTempSpoof bin/cb bin/charge_horae_daemon bin/color_tombstone bin/touch_daemon; do
+            [[ -x "$verify_directory/$executable" ]] || {
+              echo "::error::Release archive lost the executable mode for $executable"
+              exit 1
+            }
+          done
+
+          apk_path="${output_directory}/AaTempSpoof-${version}.apk"
+          native_path="${output_directory}/AaTempSpoof-native-arm64-v8a-${version}.zip"
+          install -m 0644 "${{ steps.apk.outputs.path }}" "$apk_path"
+          install -m 0644 build/artifacts/AaTempSpoof-native-arm64-v8a.zip "$native_path"
+
+          (
+            cd "$output_directory"
+            sha256sum \
+              "$(basename "$zip_path")" \
+              "$(basename "$apk_path")" \
+              "$(basename "$native_path")" > SHA256SUMS
+          )
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "zip_path=$zip_path" >> "$GITHUB_OUTPUT"
+
+      - name: Upload CI validation artifacts
+        if: env.RELEASE_BUILD != 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: AaTempSpoof-ci-${{ github.sha }}
+          path: |
+            ${{ steps.apk.outputs.path }}
+            build/artifacts/AaTempSpoof-native-arm64-v8a.zip
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+      - name: Upload signed release artifacts
+        if: env.RELEASE_BUILD == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: AaTempSpoof-${{ steps.package.outputs.version }}
+          path: build/release/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+  publish-release:
+    name: Publish GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Download native binaries
-        uses: actions/download-artifact@v4
+      - name: Download signed release artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: native-binaries
-          path: build/bin
+          name: AaTempSpoof-${{ github.ref_name }}
+          path: release-assets
 
-      - name: Download APK
-        uses: actions/download-artifact@v4
-        with:
-          name: aa-temp-spoof-apk
-          path: build/apk
-
-      - name: Prepare release folder
+      - name: Verify release assets
+        shell: bash
         run: |
-          rm -rf build/release
-          mkdir -p build/release/AAaTempSpoof/bin
-          mkdir -p build/release/AAaTempSpoof/apk
+          set -euo pipefail
+          cd release-assets
 
-          cp module.prop customize.sh service.sh post-fs-data.sh action.sh uninstall.sh build/release/AAaTempSpoof/
-          cp -r AaTempSpoof webroot build/release/AAaTempSpoof/
-          cp build/bin/* build/release/AAaTempSpoof/bin/
+          required=(
+            "AaTempSpoof-${GITHUB_REF_NAME}.zip"
+            "AaTempSpoof-${GITHUB_REF_NAME}.apk"
+            "AaTempSpoof-native-arm64-v8a-${GITHUB_REF_NAME}.zip"
+            "SHA256SUMS"
+          )
+          for file in "${required[@]}"; do
+            [[ -f "$file" ]] || {
+              echo "::error::Release asset not found: $file"
+              exit 1
+            }
+          done
+          sha256sum --check SHA256SUMS
 
-          if [ -f build/apk/app-debug.apk ]; then
-            cp build/apk/app-debug.apk build/release/AAaTempSpoof/apk/AaTempSpoof.apk
+      - name: Create or update GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          assets=(
+            "release-assets/AaTempSpoof-${GITHUB_REF_NAME}.zip"
+            "release-assets/AaTempSpoof-${GITHUB_REF_NAME}.apk"
+            "release-assets/AaTempSpoof-native-arm64-v8a-${GITHUB_REF_NAME}.zip"
+            "release-assets/SHA256SUMS"
+          )
+
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "${assets[@]}" \
+              --verify-tag \
+              --title "AaTempSpoof ${GITHUB_REF_NAME}" \
+              --generate-notes
           fi
-
-      - name: Create zip package
-        run: |
-          cd build/release/AAaTempSpoof
-          zip -r ../../AAaTempSpoof.zip .
-
-      - name: Upload release zip
-        uses: actions/upload-artifact@v4
-        with:
-          name: AAaTempSpoof-release
-          path: build/AAaTempSpoof.zip

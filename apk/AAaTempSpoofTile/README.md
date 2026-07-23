@@ -23,7 +23,7 @@ AAaTempSpoof 模块的 Android 控制中心（Quick Settings Tile）控制器。
 
 ## 构建方法
 
-### 方法一：Android Studio（推荐）
+### 方法一：Android Studio（本机开发）
 
 1. 打开 Android Studio
 2. `File → Open` 选择本项目根目录（含 `settings.gradle` 的目录）
@@ -46,10 +46,23 @@ gradlew.bat assembleDebug
 ### 方法三：Termux（在 Android 上直接构建）
 
 ```bash
-pkg install openjdk-21
+pkg install openjdk-17
 # 配置好 ANDROID_HOME 后：
 ./gradlew assembleDebug
 ```
+
+以上命令生成的 Debug APK 只用于开发测试。正式发布必须使用长期保存的独立签名密钥：
+
+```bash
+export ANDROID_KEYSTORE_PATH=/absolute/path/to/release.jks
+export ANDROID_KEYSTORE_PASSWORD='your-store-password'
+export ANDROID_KEY_ALIAS='your-key-alias'
+export ANDROID_KEY_PASSWORD='your-key-password'
+
+./gradlew :app:lintRelease :app:assembleRelease
+```
+
+签名后的产物为 `app/build/outputs/apk/release/app-release.apk`。不要发布 `app-debug.apk`，也不要使用 Android Debug 证书签名 Release 产物。
 
 ---
 

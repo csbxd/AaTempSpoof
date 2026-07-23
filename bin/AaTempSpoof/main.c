@@ -2583,7 +2583,7 @@ static int verify_module_integrity(void)
         return 0;
     }
     if (strcmp(upd_val,
-               "https://raw.githubusercontent.com/chendaojing949-sketch/"
+               "https://raw.githubusercontent.com/csbxd/"
                "AaTempSpoof/main/update.json") != 0) {
         integrity_log("\xe6\xa0\xa1\xe9\xaa\x8c\xe5\xa4\xb1\xe8\xb4\xa5"
                       " | \xe9\xa1\xb9\xe7\x9b\xae: updateJson= \xe5\x80\xbc\xe4\xb8\x8d\xe7\xac\xa6"
