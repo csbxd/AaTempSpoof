@@ -1,5 +1,7 @@
 # AaTempSpoof
 
+[![Build AaTempSpoof](https://github.com/csbxd/AaTempSpoof/actions/workflows/build.yml/badge.svg)](https://github.com/csbxd/AaTempSpoof/actions/workflows/build.yml)
+
 AaTempSpoof 是一个面向 Android Root 设备的温度伪装、去温控、充电优化和性能辅助模块。项目包含 Magisk/KernelSU/APatch 模块脚本、native 守护进程源码、WebUI 控制台、默认配置，以及可选的控制中心快捷开关 APK 项目。
 
 当前模块版本：`v13.5`
